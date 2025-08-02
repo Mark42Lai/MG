@@ -1,0 +1,30 @@
+name: Daily GSR Scan
+
+on:
+  schedule:
+    - cron: '0 11 * * *'   # 台灣時間 19:00（UTC+8 = 11:00）
+    - cron: '0 12 * * *'   # 台灣時間 20:00
+    - cron: '0 13 * * *'   # 台灣時間 21:00
+    - cron: '0 14 * * *'   # 台灣時間 22:00
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        offset: [0, 600, 1200, 1800]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Run scan script
+        env:
+          API_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+        run: |
+          python gsr_scanner.py ${{ matrix.offset }}
