@@ -27,9 +27,9 @@ start_date = (latest_trade_date - timedelta(days=lookback_days)).isoformat()
 end_date = latest_trade_date.isoformat()
 print(f"\n📅 當前偵測日期：{end_date}\n")
 
-# ✅ 抓取股票清單（只取前 600 檔）
-stock_list = dl.taiwan_stock_info().head(600)
-print("🚩 抓到前 600 檔股票")
+# ✅ 抓取股票清單（只取前 30 檔）
+stock_list = dl.taiwan_stock_info().head(30)
+print("🚩 抓到前 30 檔股票")
 print("🔍 類型欄位有哪些？", stock_list["type"].unique())
 print(stock_list.head(3))
 
