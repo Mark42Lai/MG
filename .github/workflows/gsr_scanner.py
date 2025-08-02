@@ -15,7 +15,7 @@ line_token = "dB3LRavB4/bduwyPF2tCV6pzd74FXEKHqarNyPfdP9za7eq24wmciiqtCGpm2RmMER
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--offset", type=int, default=0)
-parser.add_argument("--limit", type=int, default=5)
+parser.add_argument("--limit", type=int, default=30)
 args = parser.parse_args()
 
 def get_latest_trade_date(dl):
