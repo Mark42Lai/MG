@@ -2,18 +2,15 @@ name: Run GSR Scan
 
 on:
   schedule:
-    - cron: '0 11 * * *'   # 台灣時間 19:00（UTC+8）
+    - cron: '0 11 * * *'   # 台灣時間 19:00
     - cron: '0 12 * * *'   # 台灣時間 20:00
     - cron: '0 13 * * *'   # 台灣時間 21:00
     - cron: '0 14 * * *'   # 台灣時間 22:00
-  workflow_dispatch:       # 手動觸發也可以
+  workflow_dispatch:
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        offset: [0, 600, 1200, 1800]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -26,5 +23,21 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run script with offset
-        run: python gsr_scanner.py --offset ${{ matrix.offset }}
+      - name: Determine offset based on time
+        id: time
+        run: |
+          utc_hour=$(date -u +"%H")
+          case $utc_hour in
+            "11") echo "offset=0" >> $GITHUB_OUTPUT ;;
+            "12") echo "offset=600" >> $GITHUB_OUTPUT ;;
+            "13") echo "offset=1200" >> $GITHUB_OUTPUT ;;
+            "14") echo "offset=1800" >> $GITHUB_OUTPUT ;;
+            *) echo "Invalid time for offset, skipping..." && exit 1 ;;
+          esac
+
+      - name: Run script with calculated offset
+        run: python gsr_scanner.py --offset ${{ steps.time.outputs.offset }}
+        env:
+          API_TOKEN: ${{ secrets.FINMIND_TOKEN }}
+          LINE_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
