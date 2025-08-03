@@ -23,20 +23,26 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Determine offset based on time
-        id: time
+      - name: Determine offset from UTC hour
         run: |
           utc_hour=$(date -u +"%H")
-          case $utc_hour in
-            "11") echo "offset=0" >> $GITHUB_OUTPUT ;;
-            "12") echo "offset=600" >> $GITHUB_OUTPUT ;;
-            "13") echo "offset=1200" >> $GITHUB_OUTPUT ;;
-            "14") echo "offset=1800" >> $GITHUB_OUTPUT ;;
-            *) echo "Invalid time for offset, skipping..." && exit 1 ;;
-          esac
+          echo "🕒 Current UTC Hour: $utc_hour"
+          offset=0
+          if [ "$utc_hour" = "11" ]; then
+            offset=0
+          elif [ "$utc_hour" = "12" ]; then
+            offset=600
+          elif [ "$utc_hour" = "13" ]; then
+            offset=1200
+          elif [ "$utc_hour" = "14" ]; then
+            offset=1800
+          else
+            echo "⚠️ 非預期的執行時間 ($utc_hour)，預設 offset=0"
+          fi
+          echo "offset=$offset" >> $GITHUB_ENV
 
-      - name: Run script with calculated offset
-        run: python gsr_scanner.py --offset ${{ steps.time.outputs.offset }}
+      - name: Run script with offset
+        run: python gsr_scanner.py --offset ${{ env.offset }}
         env:
           API_TOKEN: ${{ secrets.FINMIND_TOKEN }}
           LINE_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
