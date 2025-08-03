@@ -1,30 +1,49 @@
-name: Daily GSR Scan
+name: Run GSR Scan
 
 on:
   schedule:
-    - cron: '0 11 * * *'   # 台灣時間 19:00（UTC+8 = 11:00）
+    - cron: '0 11 * * *'   # 台灣時間 19:00
     - cron: '0 12 * * *'   # 台灣時間 20:00
     - cron: '0 13 * * *'   # 台灣時間 21:00
     - cron: '0 14 * * *'   # 台灣時間 22:00
   workflow_dispatch:
 
 jobs:
-  scan:
+  run-script:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        offset: [0, 600, 1200, 1800]
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: 3.11
+
       - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Determine offset from UTC hour
         run: |
-          pip install -r requirements.txt
-      - name: Run scan script
+          utc_hour=$(date -u +"%H")
+          echo "🕒 Current UTC Hour: $utc_hour"
+          offset=0
+          if [ "$utc_hour" = "11" ]; then
+            offset=0
+          elif [ "$utc_hour" = "12" ]; then
+            offset=600
+          elif [ "$utc_hour" = "13" ]; then
+            offset=1200
+          elif [ "$utc_hour" = "14" ]; then
+            offset=1800
+          else
+            echo "⚠️ 非預期的執行時間 ($utc_hour)，預設 offset=0"
+          fi
+          echo "offset=$offset" >> $GITHUB_ENV
+
+      - name: Run script with offset
+        run: python gsr_scanner.py --offset ${{ env.offset }}
         env:
           API_TOKEN: ${{ secrets.FINMIND_TOKEN }}
-        run: |
-          python gsr_scanner.py ${{ matrix.offset }}
+          LINE_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
