@@ -14,10 +14,9 @@ total_stocks_expected = 2000  # 可依照實際股票數量微調
 num_batches = 4  # 分成幾段處理（與排程數一致）
 # ========================
 
-# ✅ 自動 offset 分段（依照現在時間）
 now_hour = datetime.now().hour
 hour_to_batch_index = {19: 0, 20: 1, 21: 2, 22: 3}
-default_batch = hour_to_batch_index.get(now_hour, 0)  # 若非預期時間，預設為第 0 段
+default_batch = hour_to_batch_index.get(now_hour, 0)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--offset", type=int, default=default_batch * (total_stocks_expected // num_batches))
@@ -46,17 +45,11 @@ def send_line_message(user_id, message):
     }
     data = {
         "to": user_id,
-        "messages": [
-            {
-                "type": "text",
-                "text": message
-            }
-        ]
+        "messages": [{"type": "text", "text": message}]
     }
 
     response = requests.post(url, headers=headers, json=data)
     print(f"🔧 LINE 回應: {response.status_code} - {response.text}")
-
     if response.status_code != 200:
         print(f"⚠️ LINE 發送失敗：{response.status_code} - {response.text}")
     else:
@@ -72,11 +65,13 @@ start_date = (latest_trade_date - timedelta(days=lookback_days)).isoformat()
 end_date = latest_trade_date.isoformat()
 print(f"\n📅 偵測日期：{end_date}，Offset: {args.offset} Limit: {args.limit}")
 
-# ✅ 股票清單並分段
 stock_list = dl.taiwan_stock_info()
 stock_list = stock_list.sort_values("stock_id").reset_index(drop=True)
 all_stocks = stock_list["stock_id"].tolist()
 selected_stocks = all_stocks[args.offset: args.offset + args.limit]
+
+# 取得股本資料（一次抓取）
+profile_df = dl.taiwan_stock_info()
 
 result = []
 
@@ -87,6 +82,30 @@ for stock_id in selected_stocks:
         if df.empty or len(df) < window + 1:
             continue
         df = df.sort_values("date").reset_index(drop=True)
+
+        # ===== 新增條件區 =====
+        latest = df.iloc[-1]
+        volume_today = latest["Trading_Volume"]
+        volume_ma20 = df["Trading_Volume"].tail(20).mean()
+        close_today = latest["close"]
+
+        # 成交量 > 20MA 且 > 200張
+        if volume_today <= volume_ma20 or volume_today <= 200_000:
+            continue
+
+        # 股價 > 30
+        if close_today <= 30:
+            continue
+
+        # 股本 > 10億
+        try:
+            capital = profile_df[profile_df["stock_id"] == stock_id]["capital"].values[0]
+            if capital < 10_000_000_000:
+                continue
+        except:
+            continue
+        # ======================
+
         df["close_max"] = df["close"].rolling(window).max()
         df["close_min"] = df["close"].rolling(window).min()
         df["高控"] = (df["close_max"] * 2 + df["close_min"]) / 3
