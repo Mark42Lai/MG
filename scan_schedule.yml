@@ -2,11 +2,10 @@ name: Run GSR Scan
 
 on:
   schedule:
-
     - cron: '0 8 * * *'   # 台灣16:00
     - cron: '0 9 * * *'   # 台灣17:00
     - cron: '0 10 * * *'  # 台灣18:00
-    - cron: '0 11 * * *'  # 台灣時間 19:00
+    - cron: '0 11 * * *'  # 台灣19:00
     - cron: '0 12 * * *'  # 台灣20:00
     - cron: '0 13 * * *'  # 台灣21:00
     - cron: '0 14 * * *'  # 台灣22:00
@@ -31,24 +30,26 @@ jobs:
         run: |
           utc_hour=$(date -u +"%H")
           echo "🕒 Current UTC Hour: $utc_hour"
-          offset=0
+
           if [ "$utc_hour" = "8" ]; then
-  offset=0
-elif [ "$utc_hour" = "9" ]; then
-  offset=550
-elif [ "$utc_hour" = "10" ]; then
-  offset=1100
-elif [ "$utc_hour" = "11" ]; then
-  offset=1650
-elif [ "$utc_hour" = "12" ]; then
-  offset=2200
-elif [ "$utc_hour" = "13" ]; then
-  offset=2750
-elif [ "$utc_hour" = "14" ]; then
-  offset=3300
+            offset=0
+          elif [ "$utc_hour" = "9" ]; then
+            offset=550
+          elif [ "$utc_hour" = "10" ]; then
+            offset=1100
+          elif [ "$utc_hour" = "11" ]; then
+            offset=1650
+          elif [ "$utc_hour" = "12" ]; then
+            offset=2200
+          elif [ "$utc_hour" = "13" ]; then
+            offset=2750
+          elif [ "$utc_hour" = "14" ]; then
+            offset=3300
           else
             echo "⚠️ 非預期的執行時間 ($utc_hour)，預設 offset=0"
+            offset=0
           fi
+
           echo "offset=$offset" >> $GITHUB_ENV
 
       - name: Run script with offset
