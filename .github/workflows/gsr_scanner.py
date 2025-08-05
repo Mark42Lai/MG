@@ -10,12 +10,12 @@ window = 12
 lookback_days = 30
 line_user_id = "U26e8775cea7db4d35acfcdd9bd30c9b9"  # Uxxxxxxxxxxxx 開頭
 line_token = "dB3LRavB4/bduwyPF2tCV6pzd74FXEKHqarNyPfdP9za7eq24wmciiqtCGpm2RmMERxf7XWFyOSPNU+YVDrdSV32EbFn9pQh+ZUodt2NdX0GGrnf5EZF4xHviXO8dcVxxp+UMTqG53ySZjr30oMZ5AdB04t89/1O/w1cDnyilFU="  # LINE Messaging API 的 token
-total_stocks_expected = 2000  # 可依照實際股票數量微調
-num_batches = 4  # 分成幾段處理（與排程數一致）
+total_stocks_expected = 3850  # 可依照實際股票數量微調
+num_batches = 7  # 分成幾段處理（與排程數一致）
 # ========================
 
 now_hour = datetime.now().hour
-hour_to_batch_index = {19: 0, 20: 1, 21: 2, 22: 3}
+hour_to_batch_index = {16: 0, 17: 1, 18: 2, 19: 3, 20: 4, 21: 5, 22: 6}
 default_batch = hour_to_batch_index.get(now_hour, 0)
 
 parser = argparse.ArgumentParser()
