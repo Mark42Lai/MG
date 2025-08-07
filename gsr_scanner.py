@@ -3,6 +3,7 @@ from FinMind.data import DataLoader
 from datetime import datetime, timedelta
 import argparse
 import requests
+import time
 
 # ===== 使用者設定區 =====
 api_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJkYXRlIjoiMjAyNS0wOC0wMiAwOTo1ODoyNiIsInVzZXJfaWQiOiJNYXJrTGFpIiwiaXAiOiIxLjE3NC44LjIzMCJ9.g3Igq0QuLzPN_KtqW5Shl1dJP2nqikV5IcUN-6sR1Xs"
