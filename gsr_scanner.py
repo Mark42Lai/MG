@@ -89,20 +89,9 @@ for stock_id in selected_stocks:
         volume_ma20 = df["Trading_Volume"].tail(20).mean()
         close_today = latest["close"]
 
-        # 成交量 > 20MA 且 > 200張
         if volume_today <= volume_ma20 or volume_today <= 200_000:
             continue
-
-        # 股價 > 30
         if close_today <= 30:
-            continue
-
-        # 股本 > 10億
-        try:
-            capital = profile_df[profile_df["stock_id"] == stock_id]["capital"].values[0]
-            if capital < 10_000_000_000:
-                continue
-        except:
             continue
         # ======================
 
