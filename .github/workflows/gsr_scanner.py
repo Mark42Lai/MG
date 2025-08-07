@@ -112,7 +112,7 @@ for stock_id in selected_stocks:
     except Exception as e:
         print(f"⚠️ {stock_id} 發生錯誤：{e}")
         continue
-
+ time.sleep(0.5)  # 無論是否發生錯誤都延遲 0.3 秒
 # ✅ 傳送結果
 if result:
     send_line_message(line_user_id, "\n\n".join(result))
