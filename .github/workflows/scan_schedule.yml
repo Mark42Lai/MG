@@ -11,50 +11,70 @@ on:
     - cron: '0 14 * * *'  # 台灣22:00
   workflow_dispatch:
 
+permissions:
+  contents: write   # 允許 commit 狀態檔回 repo
+
 jobs:
   run-script:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: '3.11'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
       - name: Determine offset from UTC hour
+        id: pick
+        shell: bash
         run: |
           utc_hour=$(date -u +"%H")
           echo "🕒 Current UTC Hour: $utc_hour"
 
-          if [ "$utc_hour" = "8" ]; then
-            offset=0
-          elif [ "$utc_hour" = "9" ]; then
-            offset=550
-          elif [ "$utc_hour" = "10" ]; then
-            offset=1100
-          elif [ "$utc_hour" = "11" ]; then
-            offset=1650
-          elif [ "$utc_hour" = "12" ]; then
-            offset=2200
-          elif [ "$utc_hour" = "13" ]; then
-            offset=2750
-          elif [ "$utc_hour" = "14" ]; then
-            offset=3300
+          if   [ "$utc_hour" = "8" ];  then offset=0
+          elif [ "$utc_hour" = "9" ];  then offset=550
+          elif [ "$utc_hour" = "10" ]; then offset=1100
+          elif [ "$utc_hour" = "11" ]; then offset=1650
+          elif [ "$utc_hour" = "12" ]; then offset=2200
+          elif [ "$utc_hour" = "13" ]; then offset=2750
+          elif [ "$utc_hour" = "14" ]; then offset=3300
           else
             echo "⚠️ 非預期的執行時間 ($utc_hour)，預設 offset=0"
             offset=0
           fi
 
           echo "offset=$offset" >> $GITHUB_ENV
+          echo "OFFSET=$offset" >> $GITHUB_OUTPUT
 
-      - name: Run script with offset
-        run: python gsr_scanner.py --offset ${{ env.offset }}
+      - name: Run scanner
         env:
           API_TOKEN: ${{ secrets.FINMIND_TOKEN }}
           LINE_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          WINDOW: 12
+          LOOKBACK_DAYS: 30
+          TOTAL_STOCKS_EXPECTED: 3850
+          NUM_BATCHES: 7
+          SLEEP_SEC: 0.5
+        run: |
+          python gsr_scanner.py --offset ${{ env.offset }}
+
+      - name: Commit state file
+        shell: bash
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain state/)" ]; then
+            git add state/
+            git commit -m "chore(state): update seen list for $(date -u +'%Y-%m-%d')"
+            git push
+          else
+            echo "No state changes to commit."
+          fi
