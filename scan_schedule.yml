@@ -11,6 +11,11 @@ on:
     - cron: '0 14 * * *'  # 台灣22:00
   workflow_dispatch:
 
+# 加入並發控制：如果有正在跑的任務，手動觸發時會排隊，避免同時執行兩次
+concurrency:
+  group: gsr-scanner-group
+  cancel-in-progress: false
+
 jobs:
   run-script:
     runs-on: ubuntu-latest
@@ -22,6 +27,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
+          cache: 'pip' # 加入快取機制，讓之後安裝 dependencies 更快
 
       - name: Install dependencies
         run: pip install -r requirements.txt
