@@ -34,7 +34,7 @@ def get_latest_trade_date(dl):
     raise Exception("❌ 找不到近一週的交易日")
 
 def send_line_message(user_id, message):
-    print("📤 準備發送 LINE 訊息：", message)
+    print("📤 準備發送 LINE 訊息\n", message)
     if not line_token:
         print("❌ 找不到 LINE_TOKEN，略過發送")
         return
@@ -50,7 +50,6 @@ def send_line_message(user_id, message):
     }
 
     response = requests.post(url, headers=headers, json=data)
-    print(f"🔧 LINE 回應: {response.status_code} - {response.text}")
     if response.status_code != 200:
         print(f"⚠️ LINE 發送失敗：{response.status_code} - {response.text}")
     else:
@@ -66,25 +65,24 @@ start_date = (latest_trade_date - timedelta(days=lookback_days)).isoformat()
 end_date = latest_trade_date.isoformat()
 print(f"\n📅 偵測日期：{end_date}，Offset: {args.offset} Limit: {args.limit}")
 
+# ✅ 關鍵修復：抓取股票清單並強制「去重複」
 stock_list = dl.taiwan_stock_info()
+stock_list = stock_list.drop_duplicates(subset=['stock_id']) # 確保沒有重複的代碼
 stock_list = stock_list.sort_values("stock_id").reset_index(drop=True)
 all_stocks = stock_list["stock_id"].tolist()
 selected_stocks = all_stocks[args.offset: args.offset + args.limit]
-
-# 取得股本資料（一次抓取）
-profile_df = dl.taiwan_stock_info()
 
 result = []
 
 for stock_id in selected_stocks:
     try:
-        print(f"▶ {stock_id}")
+        # print(f"▶ {stock_id}") # 測試時可打開，上線建議關閉以保持 log 乾淨
         df = dl.taiwan_stock_daily(stock_id=stock_id, start_date=start_date, end_date=end_date)
         if df.empty or len(df) < window + 1:
             continue
         df = df.sort_values("date").reset_index(drop=True)
 
-        # ===== 新增條件區 =====
+        # ===== 條件區 =====
         latest = df.iloc[-1]
         volume_today = latest["Trading_Volume"]
         volume_ma20 = df["Trading_Volume"].tail(20).mean()
@@ -100,22 +98,33 @@ for stock_id in selected_stocks:
         df["close_min"] = df["close"].rolling(window).min()
         df["高控"] = (df["close_max"] * 2 + df["close_min"]) / 3
 
-        if (
-            df.iloc[-2]["close"] <= df.iloc[-2]["高控"]
-            and df.iloc[-1]["close"] > df.iloc[-1]["高控"]
-        ):
-            gap = df.iloc[-1]["close"] - df.iloc[-1]["高控"]
-            ratio = gap / df.iloc[-1]["高控"] * 100
+        yesterday = df.iloc[-2]
+        today = df.iloc[-1]
+
+        if (yesterday["close"] <= yesterday["高控"] and today["close"] > today["高控"]):
+            gap = today["close"] - today["高控"]
+            ratio = gap / today["高控"] * 100
             stock_name = stock_list[stock_list["stock_id"] == stock_id]["stock_name"].values[0]
-            msg = f"📈【{stock_id} {stock_name}】\n收盤價突破高控！\n收盤價: {df.iloc[-1]['close']}\n高控: {round(df.iloc[-1]['高控'], 2)}\n突破幅度: {round(ratio, 2)}%\n日期: {df.iloc[-1]['date']}"
-            result.append(msg)
+            
+            msg = f"📈【{stock_id} {stock_name}】\n收盤價突破高控！\n收盤價: {today['close']}\n高控: {round(today['高控'], 2)}\n突破幅度: {round(ratio, 2)}%\n日期: {today['date']}"
+            
+            # ✅ 雙重保險：如果這則訊息已經在清單裡了，就不要再加進去
+            if msg not in result:
+                result.append(msg)
 
     except Exception as e:
         print(f"⚠️ {stock_id} 發生錯誤：{e}")
         continue
-    time.sleep(0.5)  # 無論是否發生錯誤都延遲 0.3 秒
-# ✅ 傳送結果
+    
+    time.sleep(0.3)  # 稍微縮短延遲，加快整體掃描速度
+
+# ✅ 傳送結果 (加入分段發送保護，避免字數超過 LINE 限制)
 if result:
-    send_line_message(line_user_id, "\n\n".join(result))
+    # 每 15 檔股票合併成一個訊息發送
+    for i in range(0, len(result), 15):
+        batch_msg = "\n\n".join(result[i:i+15])
+        send_line_message(line_user_id, batch_msg)
 else:
-    send_line_message(line_user_id, "😴 此批無突破高控")
+    # 只有在第一批次才發送「無突破」，減少整天收到 😴 的情況
+    if args.offset == 0:
+        send_line_message(line_user_id, "😴 此批無突破高控")
