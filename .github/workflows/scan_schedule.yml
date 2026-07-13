@@ -2,35 +2,51 @@ name: Run GSR Scan
 
 on:
   schedule:
-    - cron: '0 8 * * *'   # 台灣16:00
-    - cron: '0 9 * * *'   # 台灣17:00
-    - cron: '0 10 * * *'  # 台灣18:00
-    - cron: '0 11 * * *'  # 台灣19:00
-    - cron: '0 12 * * *'  # 台灣20:00
-    - cron: '0 13 * * *'  # 台灣21:00
-    - cron: '0 14 * * *'  # 台灣22:00
+    - cron: '0 8 * * *'   # 台灣 16:00，offset 0
+    - cron: '0 9 * * *'   # 台灣 17:00，offset 550
+    - cron: '0 10 * * *'  # 台灣 18:00，offset 1100
+    - cron: '0 11 * * *'  # 台灣 19:00，offset 1650
+    - cron: '0 12 * * *'  # 台灣 20:00，offset 2200
+    - cron: '0 13 * * *'  # 台灣 21:00，offset 2750
+    - cron: '0 14 * * *'  # 台灣 22:00，offset 3300
+
   workflow_dispatch:
 
 permissions:
-  contents: write   # 允許 commit 狀態檔回 repo
+  contents: write
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
+
     steps:
+      # ==================================================
+      # ① 下載 Repository 程式碼
+      # ==================================================
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # ==================================================
+      # ② 安裝 Python
+      # ==================================================
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # ==================================================
+      # ③ 安裝套件
+      # ==================================================
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
+      # ==================================================
+      # ④ 依照執行時間決定股票掃描起點
+      # ==================================================
       - name: Determine offset from UTC hour
         id: pick
         shell: bash
@@ -38,40 +54,64 @@ jobs:
           utc_hour=$(date -u +"%H")
           echo "🕒 Current UTC Hour: $utc_hour"
 
-          if   [ "$utc_hour" = "8" ];  then offset=0
-          elif [ "$utc_hour" = "9" ];  then offset=550
-          elif [ "$utc_hour" = "10" ]; then offset=1100
-          elif [ "$utc_hour" = "11" ]; then offset=1650
-          elif [ "$utc_hour" = "12" ]; then offset=2200
-          elif [ "$utc_hour" = "13" ]; then offset=2750
-          elif [ "$utc_hour" = "14" ]; then offset=3300
+          if   [ "$utc_hour" = "08" ]; then
+            offset=0
+          elif [ "$utc_hour" = "09" ]; then
+            offset=550
+          elif [ "$utc_hour" = "10" ]; then
+            offset=1100
+          elif [ "$utc_hour" = "11" ]; then
+            offset=1650
+          elif [ "$utc_hour" = "12" ]; then
+            offset=2200
+          elif [ "$utc_hour" = "13" ]; then
+            offset=2750
+          elif [ "$utc_hour" = "14" ]; then
+            offset=3300
           else
-            echo "⚠️ 非預期的執行時間 ($utc_hour)，預設 offset=0"
+            echo "⚠️ 非排程執行時間，預設 offset=0"
             offset=0
           fi
 
-          echo "offset=$offset" >> $GITHUB_ENV
-          echo "OFFSET=$offset" >> $GITHUB_OUTPUT
+          echo "本次掃描 offset=$offset"
+          echo "offset=$offset" >> "$GITHUB_OUTPUT"
 
+      # ==================================================
+      # ⑤ 執行股票掃描
+      #
+      # 左側：Python 讀取的環境變數名稱
+      # 右側：GitHub Repository Secret 名稱
+      # ==================================================
       - name: Run scanner
         env:
-          API_TOKEN: ${{ secrets.FINMIND_TOKEN }}
-          LINE_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-          WINDOW: 12
-          LOOKBACK_DAYS: 30
-          TOTAL_STOCKS_EXPECTED: 3850
-          NUM_BATCHES: 7
-          SLEEP_SEC: 0.5
-        run: |
-          python gsr_scanner.py --offset ${{ env.offset }}
 
+          WINDOW: "12"
+          LOOKBACK_DAYS: "150"
+          TOTAL_STOCKS_EXPECTED: "3850"
+          NUM_BATCHES: "7"
+          SLEEP_SEC: "0.5"
+
+        run: |
+          echo "🚀 本次 offset：${{ steps.pick.outputs.offset }}"
+          echo "🚀 本次 limit：550"
+
+          python gsr_scanner.py \
+            --offset "${{ steps.pick.outputs.offset }}" \
+            --limit 550
+
+      # ==================================================
+      # ⑥ 將狀態檔寫回 Repository
+      # ==================================================
       - name: Commit state file
         shell: bash
         run: |
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git status --porcelain state/)" ]; then
+
+          if [ -d "state" ] && [ -n "$(git status --porcelain state/)" ]; then
             git add state/
             git commit -m "chore(state): update seen list for $(date -u +'%Y-%m-%d')"
             git push
