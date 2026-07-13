@@ -52,7 +52,7 @@ except UnicodeEncodeError as error:
 # =====================================================
 
 WINDOW = 12
-LOOKBACK_DAYS = 150
+LOOKBACK_DAYS = 201
 
 
 # =====================================================
