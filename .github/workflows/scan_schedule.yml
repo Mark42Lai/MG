@@ -2,13 +2,32 @@ name: Run GSR Scan
 
 on:
   schedule:
-    - cron: '0 8 * * *'   # 台灣 16:00，offset 0
-    - cron: '0 9 * * *'   # 台灣 17:00，offset 550
-    - cron: '0 10 * * *'  # 台灣 18:00，offset 1100
-    - cron: '0 11 * * *'  # 台灣 19:00，offset 1650
-    - cron: '0 12 * * *'  # 台灣 20:00，offset 2200
-    - cron: '0 13 * * *'  # 台灣 21:00，offset 2750
-    - cron: '0 14 * * *'  # 台灣 22:00，offset 3300
+    # GitHub Actions cron 使用 UTC 時間
+    # 台灣時間 = UTC + 8
+    #
+    # 每批掃描 440 檔，共 9 批
+    # 預計可覆蓋約 3960 檔股票
+    #
+    # 台灣時間：
+    # 16:00 → offset 0
+    # 17:00 → offset 440
+    # 18:00 → offset 880
+    # 19:00 → offset 1320
+    # 20:00 → offset 1760
+    # 21:00 → offset 2200
+    # 22:00 → offset 2640
+    # 23:00 → offset 3080
+    # 00:00 → offset 3520
+
+    - cron: '0 8 * * *'    # 台灣 16:00，offset 0
+    - cron: '0 9 * * *'    # 台灣 17:00，offset 440
+    - cron: '0 10 * * *'   # 台灣 18:00，offset 880
+    - cron: '0 11 * * *'   # 台灣 19:00，offset 1320
+    - cron: '0 12 * * *'   # 台灣 20:00，offset 1760
+    - cron: '0 13 * * *'   # 台灣 21:00，offset 2200
+    - cron: '0 14 * * *'   # 台灣 22:00，offset 2640
+    - cron: '0 15 * * *'   # 台灣 23:00，offset 3080
+    - cron: '0 16 * * *'   # 台灣 00:00，offset 3520
 
   workflow_dispatch:
 
@@ -57,23 +76,27 @@ jobs:
           if   [ "$utc_hour" = "08" ]; then
             offset=0
           elif [ "$utc_hour" = "09" ]; then
-            offset=550
+            offset=440
           elif [ "$utc_hour" = "10" ]; then
-            offset=1100
+            offset=880
           elif [ "$utc_hour" = "11" ]; then
-            offset=1650
+            offset=1320
           elif [ "$utc_hour" = "12" ]; then
-            offset=2200
+            offset=1760
           elif [ "$utc_hour" = "13" ]; then
-            offset=2750
+            offset=2200
           elif [ "$utc_hour" = "14" ]; then
-            offset=3300
+            offset=2640
+          elif [ "$utc_hour" = "15" ]; then
+            offset=3080
+          elif [ "$utc_hour" = "16" ]; then
+            offset=3520
           else
             echo "⚠️ 非排程執行時間，預設 offset=0"
             offset=0
           fi
 
-          echo "本次掃描 offset=$offset"
+          echo "🚀 本次掃描 offset=$offset"
           echo "offset=$offset" >> "$GITHUB_OUTPUT"
 
       # ==================================================
@@ -91,16 +114,16 @@ jobs:
           WINDOW: "12"
           LOOKBACK_DAYS: "150"
           TOTAL_STOCKS_EXPECTED: "3850"
-          NUM_BATCHES: "7"
+          NUM_BATCHES: "9"
           SLEEP_SEC: "0.5"
 
         run: |
           echo "🚀 本次 offset：${{ steps.pick.outputs.offset }}"
-          echo "🚀 本次 limit：550"
+          echo "🚀 本次 limit：440"
 
           python gsr_scanner.py \
             --offset "${{ steps.pick.outputs.offset }}" \
-            --limit 550
+            --limit 440
 
       # ==================================================
       # ⑥ 將狀態檔寫回 Repository
