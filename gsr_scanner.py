@@ -510,6 +510,10 @@ def main():
         "stock_id"
     ].tolist()
 
+    print(f"📋 股票清單共 {len(all_stocks)} 檔")
+    if not all_stocks:
+        raise RuntimeError("股票清單為空，停止掃描")
+
     selected_stocks = all_stocks[
         args.offset:
         args.offset + args.limit
@@ -520,7 +524,19 @@ def main():
         f"{len(selected_stocks)} 檔股票"
     )
 
+    if not selected_stocks:
+        print("ℹ️ 本批 offset 已超過股票清單，無須掃描或發送無訊號通知")
+        return
+
+    # 最後一批必須涵蓋整份清單；新增股票不能悄悄漏掃。
+    if os.environ.get("FINAL_BATCH") == "1" and args.offset + args.limit < len(all_stocks):
+        raise RuntimeError(
+            f"最後一批只涵蓋至 {args.offset + args.limit}，"
+            f"股票清單有 {len(all_stocks)} 檔，請增加批次"
+        )
+
     result = []
+    rate_limit_error = None
 
     # ================================================
     # 逐檔掃描
@@ -558,6 +574,11 @@ def main():
                 f"{type(error).__name__}: "
                 f"{error}"
             )
+
+            if "Requests reach the upper limit" in str(error):
+                rate_limit_error = error
+                print("❌ FinMind 額度已滿，本批停止；未掃描的股票不可視為無訊號")
+                break
 
             continue
 
@@ -603,7 +624,7 @@ def main():
                     "LINE 訊息發送失敗"
                 )
 
-    else:
+    elif not rate_limit_error:
         if selected_stocks:
             scan_end = (
                 args.offset
@@ -628,6 +649,9 @@ def main():
             raise RuntimeError(
                 "LINE 訊息發送失敗"
             )
+
+    if rate_limit_error:
+        raise RuntimeError("FinMind 額度不足，本批掃描不完整") from rate_limit_error
 
     print("\n✅ 本批掃描完成")
 
