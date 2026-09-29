@@ -228,6 +228,7 @@ def scan_stock(
     stock_id: str,
     start_date: str,
     end_date: str,
+    signal_date: str,
 ):
     df = data_loader.taiwan_stock_daily(
         stock_id=stock_id,
@@ -235,7 +236,7 @@ def scan_stock(
         end_date=end_date,
     )
 
-    if df.empty or len(df) < 60:
+    if df.empty or len(df) < WINDOW + 1:
         return None
 
     df = (
@@ -278,18 +279,17 @@ def scan_stock(
         .reset_index(drop=True)
     )
 
-    if len(df) < 60:
+    # FinMind 無公告價格的日線可能是 0，不能當作有效收盤或高低價。
+    df = df.loc[
+        (df["close"] > 0) & (df["max"] > 0) & (df["min"] > 0)
+    ].reset_index(drop=True)
+
+    if len(df) < WINDOW + 1:
         return None
 
     # ================================================
-    # 計算 MA55、12日高低、HC、LC
+    # 只計算 GM Day0 所需的 12 日 HC（含當日）
     # ================================================
-
-    df["MA55"] = (
-        df["close"]
-        .rolling(55)
-        .mean()
-    )
 
     df["high_12"] = (
         df["max"]
@@ -309,101 +309,29 @@ def scan_stock(
         + df["low_12"]
     ) / 3
 
-    # 低控
-    df["LC"] = (
-        df["high_12"]
-        + df["low_12"] * 2
-    ) / 3
+    today = df.iloc[-1]
+    yesterday = df.iloc[-2]
 
-    df = (
-        df.dropna(
-            subset=["MA55", "HC", "LC"]
-        )
-        .reset_index(drop=True)
-    )
-
-    if len(df) < 2:
+    if str(today["date"])[:10] != signal_date:
         return None
 
     # ================================================
-    # 計算交叉訊號
+    # 今日收盤突破今日 HC，且前一交易日尚未站上其 HC
     # ================================================
-
-    # 昨日收盤 <= 昨日高控
-    # 今日收盤 > 今日高控
-    df["cross_up_HC"] = (
-        (df["close"] > df["HC"])
-        & (
-            df["close"].shift(1)
-            <= df["HC"].shift(1)
-        )
-    )
-
-    # 昨日收盤 >= 昨日 MA55
-    # 今日收盤 < 今日 MA55
-    df["cross_down_MA55"] = (
-        (df["close"] < df["MA55"])
-        & (
-            df["close"].shift(1)
-            >= df["MA55"].shift(1)
-        )
-    )
-
-    # 昨日收盤 >= 昨日低控
-    # 今日收盤 < 今日低控
-    df["cross_down_LC"] = (
-        (df["close"] < df["LC"])
-        & (
-            df["close"].shift(1)
-            >= df["LC"].shift(1)
-        )
-    )
-
-    # ================================================
-    # 模擬持股狀態
-    # ================================================
-
-    is_holding = False
-    today_is_new_breakout = False
-
-    for i in range(len(df)):
-        current_close = float(df.at[i, "close"])
-        current_ma55 = float(df.at[i, "MA55"])
-
-        if not is_holding:
-            if bool(df.at[i, "cross_up_HC"]):
-                is_holding = True
-
-                if i == len(df) - 1:
-                    today_is_new_breakout = True
-
-        else:
-            exit_by_ma55 = bool(
-                df.at[i, "cross_down_MA55"]
-            )
-
-            exit_by_lc = (
-                current_close < current_ma55
-                and bool(
-                    df.at[i, "cross_down_LC"]
-                )
-            )
-
-            if exit_by_ma55 or exit_by_lc:
-                is_holding = False
-
-    if not today_is_new_breakout:
+    if not (
+        pd.notna(today["HC"])
+        and pd.notna(yesterday["HC"])
+        and today["close"] > today["HC"]
+        and yesterday["close"] <= yesterday["HC"]
+    ):
         return None
 
     # ================================================
     # 產生通知內容
     # ================================================
 
-    last_row = df.iloc[-1]
-
-    close_price = float(last_row["close"])
-    hc_value = float(last_row["HC"])
-    ma55_value = float(last_row["MA55"])
+    close_price = float(today["close"])
+    hc_value = float(today["HC"])
 
     breakout_ratio = (
         (close_price - hc_value)
@@ -416,16 +344,11 @@ def scan_stock(
         stock_id,
     )
 
-    signal_date = str(
-        last_row["date"]
-    )[:10]
-
     message = (
         f"📈【{stock_id} {stock_name}】\n"
-        f"🔥 最新突破高控！\n"
+        f"🔥 今日突破高控！\n"
         f"收盤價: {close_price:.2f}\n"
         f"高控(HC): {hc_value:.2f}\n"
-        f"MA55: {ma55_value:.2f}\n"
         f"突破幅度: {breakout_ratio:.2f}%\n"
         f"日期: {signal_date}"
     )
@@ -451,6 +374,14 @@ def main():
     latest_trade_date = get_latest_trade_date(
         data_loader
     )
+
+    # 定時任務只通報該交易日的突破；休市時不重送前次訊號。
+    if (
+        os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+        and latest_trade_date != datetime.now(timezone.utc).date()
+    ):
+        print(f"ℹ️ 今天無新台股交易資料（最近交易日：{latest_trade_date}），不發通知")
+        return
 
     start_date = (
         latest_trade_date
@@ -489,6 +420,11 @@ def main():
         .astype(str)
         .str.strip()
     )
+
+    # FinMind 清單也包含類股指數與 ETF；只掃描四碼個股代號。
+    stock_list = stock_list.loc[
+        stock_list["stock_id"].str.fullmatch(r"[1-9][0-9]{3}")
+    ].copy()
 
     stock_list["stock_name"] = (
         stock_list["stock_name"]
@@ -558,6 +494,7 @@ def main():
                 stock_id=stock_id,
                 start_date=start_date,
                 end_date=api_end_date,
+                signal_date=latest_trade_date.isoformat(),
             )
 
             if message:
