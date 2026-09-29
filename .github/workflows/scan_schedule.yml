@@ -2,18 +2,20 @@ name: Run GSR Scan
 
 on:
   schedule:
-    - cron: '0 8 * * *'   # 台灣 16:00，offset 0
-    - cron: '0 9 * * *'   # 台灣 17:00，offset 550
-    - cron: '0 10 * * *'  # 台灣 18:00，offset 1100
-    - cron: '0 11 * * *'  # 台灣 19:00，offset 1650
-    - cron: '0 12 * * *'  # 台灣 20:00，offset 2200
-    - cron: '0 13 * * *'  # 台灣 21:00，offset 2750
-    - cron: '0 14 * * *'  # 台灣 22:00，offset 3300
+    - cron: '17 8 * * 1-5'   # 台灣 16:17，offset 0
+    - cron: '17 9 * * 1-5'   # 台灣 17:17，offset 360
+    - cron: '17 10 * * 1-5'  # 台灣 18:17，offset 720
+    - cron: '17 11 * * 1-5'  # 台灣 19:17，offset 1080
+    - cron: '17 12 * * 1-5'  # 台灣 20:17，offset 1440
+    - cron: '17 13 * * 1-5'  # 台灣 21:17，offset 1800
+    - cron: '17 14 * * 1-5'  # 台灣 22:17，offset 2160
+    - cron: '17 15 * * 1-5'  # 台灣 23:17，offset 2520
+    - cron: '17 16 * * 1-5'  # 台灣次日 00:17，offset 2880
 
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   run-script:
@@ -26,7 +28,6 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       # ==================================================
       # ② 安裝 Python
@@ -47,31 +48,23 @@ jobs:
       # ==================================================
       # ④ 依照執行時間決定股票掃描起點
       # ==================================================
-      - name: Determine offset from UTC hour
+      - name: Determine offset from scheduled cron
         id: pick
         shell: bash
         run: |
-          utc_hour=$(date -u +"%H")
-          echo "🕒 Current UTC Hour: $utc_hour"
-
-          if   [ "$utc_hour" = "08" ]; then
-            offset=0
-          elif [ "$utc_hour" = "09" ]; then
-            offset=550
-          elif [ "$utc_hour" = "10" ]; then
-            offset=1100
-          elif [ "$utc_hour" = "11" ]; then
-            offset=1650
-          elif [ "$utc_hour" = "12" ]; then
-            offset=2200
-          elif [ "$utc_hour" = "13" ]; then
-            offset=2750
-          elif [ "$utc_hour" = "14" ]; then
-            offset=3300
-          else
-            echo "⚠️ 非排程執行時間，預設 offset=0"
-            offset=0
-          fi
+          case '${{ github.event.schedule }}' in
+            '17 8 * * 1-5')  offset=0 ;;
+            '17 9 * * 1-5')  offset=360 ;;
+            '17 10 * * 1-5') offset=720 ;;
+            '17 11 * * 1-5') offset=1080 ;;
+            '17 12 * * 1-5') offset=1440 ;;
+            '17 13 * * 1-5') offset=1800 ;;
+            '17 14 * * 1-5') offset=2160 ;;
+            '17 15 * * 1-5') offset=2520 ;;
+            '17 16 * * 1-5') offset=2880 ;;
+            '') offset=0 ;;  # 手動執行只測第一批
+            *) echo '未知排程，停止以免重複掃描'; exit 1 ;;
+          esac
 
           echo "本次掃描 offset=$offset"
           echo "offset=$offset" >> "$GITHUB_OUTPUT"
@@ -87,34 +80,13 @@ jobs:
           API_TOKEN: ${{ secrets.API_TOKEN }}
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-
-          WINDOW: "12"
-          LOOKBACK_DAYS: "150"
-          TOTAL_STOCKS_EXPECTED: "3850"
-          NUM_BATCHES: "7"
-          SLEEP_SEC: "0.5"
+          FINAL_BATCH: ${{ github.event.schedule == '17 16 * * 1-5' && '1' || '0' }}
 
         run: |
           echo "🚀 本次 offset：${{ steps.pick.outputs.offset }}"
-          echo "🚀 本次 limit：550"
+          echo "🚀 本次 limit：360"
 
           python gsr_scanner.py \
             --offset "${{ steps.pick.outputs.offset }}" \
-            --limit 550
-
-      # ==================================================
-      # ⑥ 將狀態檔寫回 Repository
-      # ==================================================
-      - name: Commit state file
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if [ -d "state" ] && [ -n "$(git status --porcelain state/)" ]; then
-            git add state/
-            git commit -m "chore(state): update seen list for $(date -u +'%Y-%m-%d')"
-            git push
-          else
-            echo "No state changes to commit."
+            --limit 360
           fi
