@@ -562,30 +562,7 @@ def main():
                 )
 
     elif not rate_limit_error:
-        if selected_stocks:
-            scan_end = (
-                args.offset
-                + len(selected_stocks)
-                - 1
-            )
-        else:
-            scan_end = args.offset
-
-        no_signal_message = (
-            "😴 此批無全新突破高控的股票\n"
-            f"掃描範圍: {args.offset} ~ {scan_end}\n"
-            f"交易日期: {latest_trade_date.isoformat()}"
-        )
-
-        success = send_line_message(
-            LINE_USER_ID,
-            no_signal_message,
-        )
-
-        if not success:
-            raise RuntimeError(
-                "LINE 訊息發送失敗"
-            )
+        print("📭 本批無今日突破股票，不發 LINE")
 
     if rate_limit_error:
         raise RuntimeError("FinMind 額度不足，本批掃描不完整") from rate_limit_error
