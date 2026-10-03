@@ -27,8 +27,6 @@ jobs:
       # ==================================================
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-
       # ==================================================
       # ② 安裝 Python
       # ==================================================
@@ -89,4 +87,3 @@ jobs:
           python gsr_scanner.py \
             --offset "${{ steps.pick.outputs.offset }}" \
             --limit 360
-          fi
