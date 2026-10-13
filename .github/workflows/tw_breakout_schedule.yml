@@ -1,20 +1,21 @@
 name: Run GSR Scan
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/tw_breakout_schedule.yml'
   schedule:
-    - cron: '17 8 * * 1-5'   # 台灣 16:17，offset 0
-    - cron: '17 9 * * 1-5'   # 台灣 17:17，offset 360
-    - cron: '17 10 * * 1-5'  # 台灣 18:17，offset 720
-    - cron: '17 11 * * 1-5'  # 台灣 19:17，offset 1080
-    - cron: '17 12 * * 1-5'  # 台灣 20:17，offset 1440
-    - cron: '17 13 * * 1-5'  # 台灣 21:17，offset 1800
-    - cron: '17 14 * * 1-5'  # 台灣 22:17，offset 2160
-    - cron: '17 15 * * 1-5'  # 台灣 23:17，offset 2520
-    - cron: '17 16 * * 1-5'  # 台灣次日 00:17，offset 2880
+    - cron: '15 17 * * 1-5'   # 台灣 17:15，offset 0
+      timezone: Asia/Taipei
+    - cron: '15 18 * * 1-5'   # 台灣 18:15，offset 380
+      timezone: Asia/Taipei
+    - cron: '15 19 * * 1-5'   # 台灣 19:15，offset 760
+      timezone: Asia/Taipei
+    - cron: '15 20 * * 1-5'   # 台灣 20:15，offset 1140
+      timezone: Asia/Taipei
+    - cron: '15 21 * * 1-5'   # 台灣 21:15，offset 1520
+      timezone: Asia/Taipei
+    - cron: '15 22 * * 1-5'   # 台灣 22:15，offset 1900
+      timezone: Asia/Taipei
+    - cron: '15 23 * * 1-5'   # 台灣 23:15，offset 2280
+      timezone: Asia/Taipei
 
   workflow_dispatch:
 
@@ -55,15 +56,13 @@ jobs:
         shell: bash
         run: |
           case '${{ github.event.schedule }}' in
-            '17 8 * * 1-5')  offset=0 ;;
-            '17 9 * * 1-5')  offset=360 ;;
-            '17 10 * * 1-5') offset=720 ;;
-            '17 11 * * 1-5') offset=1080 ;;
-            '17 12 * * 1-5') offset=1440 ;;
-            '17 13 * * 1-5') offset=1800 ;;
-            '17 14 * * 1-5') offset=2160 ;;
-            '17 15 * * 1-5') offset=2520 ;;
-            '17 16 * * 1-5') offset=2880 ;;
+            '15 17 * * 1-5') offset=0 ;;
+            '15 18 * * 1-5') offset=380 ;;
+            '15 19 * * 1-5') offset=760 ;;
+            '15 20 * * 1-5') offset=1140 ;;
+            '15 21 * * 1-5') offset=1520 ;;
+            '15 22 * * 1-5') offset=1900 ;;
+            '15 23 * * 1-5') offset=2280 ;;
             '') offset=0 ;;  # 手動執行只測第一批
             *) echo '未知排程，停止以免重複掃描'; exit 1 ;;
           esac
@@ -82,12 +81,12 @@ jobs:
           API_TOKEN: ${{ secrets.API_TOKEN }}
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-          FINAL_BATCH: ${{ github.event.schedule == '17 16 * * 1-5' && '1' || '0' }}
+          FINAL_BATCH: ${{ github.event.schedule == '15 23 * * 1-5' && '1' || '0' }}
 
         run: |
           echo "🚀 本次 offset：${{ steps.pick.outputs.offset }}"
-          echo "🚀 本次 limit：360"
+          echo "🚀 本次 limit：380"
 
           python gsr_scanner.py \
             --offset "${{ steps.pick.outputs.offset }}" \
-            --limit 360
+            --limit 380
