@@ -98,6 +98,29 @@ def get_taiwan_today():
     return datetime.now(taiwan_timezone).date()
 
 
+def scheduled_trade_date(now_taiwan: datetime, offset: int):
+    """Return the intended trading date, rejecting a schedule over an hour late."""
+    if offset not in range(0, 2281, 380):
+        raise RuntimeError(f"未知掃描批次 offset={offset}")
+
+    scheduled_time = now_taiwan.replace(
+        hour=17 + offset // 380,
+        minute=15,
+        second=0,
+        microsecond=0,
+    )
+    if scheduled_time > now_taiwan:
+        scheduled_time -= timedelta(days=1)
+
+    delay = now_taiwan - scheduled_time
+    if delay >= timedelta(hours=1):
+        raise RuntimeError(
+            f"排程延遲 {delay}，本批停止，避免清晨發出前一日訊號"
+        )
+
+    return scheduled_time.date()
+
+
 # =====================================================
 # ⑥ 尋找最近交易日
 # =====================================================
@@ -363,6 +386,15 @@ def scan_stock(
 def main():
     show_environment_status()
 
+    if os.environ.get("GITHUB_EVENT_NAME") == "push":
+        print("ℹ️ Workflow 設定更新，不執行股票掃描")
+        return
+
+    expected_trade_date = None
+    if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+        now_taiwan = datetime.now(timezone(timedelta(hours=8)))
+        expected_trade_date = scheduled_trade_date(now_taiwan, args.offset)
+
     print("\n🔐 登入 FinMind API...")
 
     data_loader = DataLoader()
@@ -375,12 +407,12 @@ def main():
         data_loader
     )
 
-    # 定時任務只通報該交易日的突破；休市時不重送前次訊號。
-    if (
-        os.environ.get("GITHUB_EVENT_NAME") == "schedule"
-        and latest_trade_date != datetime.now(timezone.utc).date()
-    ):
-        print(f"ℹ️ 今天無新台股交易資料（最近交易日：{latest_trade_date}），不發通知")
+    # 定時任務只通報該台灣交易日的突破；休市時不重送前次訊號。
+    if expected_trade_date is not None and latest_trade_date != expected_trade_date:
+        print(
+            f"ℹ️ 預定交易日 {expected_trade_date} 無新台股資料"
+            f"（最近交易日：{latest_trade_date}），不發通知"
+        )
         return
 
     start_date = (
