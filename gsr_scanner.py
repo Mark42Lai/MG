@@ -99,7 +99,7 @@ def get_taiwan_today():
 
 
 def scheduled_trade_date(now_taiwan: datetime, offset: int):
-    """Return the intended trading date, rejecting a schedule over an hour late."""
+    """Allow delayed batches during the same Taiwan trading evening."""
     if offset not in range(0, 2281, 380):
         raise RuntimeError(f"未知掃描批次 offset={offset}")
 
@@ -109,14 +109,16 @@ def scheduled_trade_date(now_taiwan: datetime, offset: int):
         second=0,
         microsecond=0,
     )
-    if scheduled_time > now_taiwan:
-        scheduled_time -= timedelta(days=1)
+    # GitHub 排程可能延遲數小時；當晚仍可補掃。
+    # 清晨早於該批預定時刻，不能當作今天的批次或重送昨天訊號。
+    if now_taiwan < scheduled_time or now_taiwan.weekday() >= 5:
+        raise RuntimeError(
+            "目前不在本批的台灣交易日晚間時段，本批停止，避免重送前一日訊號"
+        )
 
     delay = now_taiwan - scheduled_time
     if delay >= timedelta(hours=1):
-        raise RuntimeError(
-            f"排程延遲 {delay}，本批停止，避免清晨發出前一日訊號"
-        )
+        print(f"ℹ️ 排程延遲 {delay}，仍在當晚，繼續掃描 {scheduled_time.date()}")
 
     return scheduled_time.date()
 
