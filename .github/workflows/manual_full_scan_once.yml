@@ -10,7 +10,7 @@ jobs:
   scan:
     name: Batch offset ${{ matrix.offset }}
     runs-on: ubuntu-latest
-    timeout-minutes: 95
+    timeout-minutes: 100
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -39,31 +39,30 @@ jobs:
           from datetime import date
           import requests
 
-          deadline = time.monotonic() + 75 * 60
-          while True:
-              response = requests.get(
-                  "https://api.web.finmindtrade.com/v2/user_info",
-                  headers={"Authorization": "Bearer " + os.environ["API_TOKEN"]},
-                  timeout=30,
-              )
-              response.raise_for_status()
-              info = response.json()
-              used = int(info["user_count"])
-              cap = int(info["api_request_limit"])
-              remaining = cap - used
-              print(f"FinMind quota: used={used}, limit={cap}, remaining={remaining}", flush=True)
-              if cap < 400:
-                  raise RuntimeError("Account limit is below the 400-request safety budget")
-              if remaining >= 400:
-                  break
-              if time.monotonic() >= deadline:
-                  raise RuntimeError("Quota did not recover within 75 minutes; batch was not scanned")
-              time.sleep(60)
-
           # This is an explicitly requested manual catch-up, not a scheduled run.
           os.environ["GITHUB_EVENT_NAME"] = "workflow_dispatch"
           sys.argv = ["gsr_scanner.py", "--offset", os.environ["SCAN_OFFSET"], "--limit", "380"]
           scanner = runpy.run_path("gsr_scanner.py", run_name="manual_scanner")
           # Freeze the requested last closing date even if a job waits past midnight.
           scanner["main"].__globals__["get_taiwan_today"] = lambda: date(2026, 10, 21)
+          # Retry only the failed API call, preserving earlier stock results.
+          original_loader = scanner["main"].__globals__["DataLoader"]
+          wait_deadline = time.monotonic() + 75 * 60
+          def with_quota_wait(call, *args, **kwargs):
+              while True:
+                  try:
+                      return call(*args, **kwargs)
+                  except Exception as error:
+                      if "Requests reach the upper limit" not in str(error):
+                          raise
+                      if time.monotonic() >= wait_deadline:
+                          raise RuntimeError("Quota retry deadline reached; batch is incomplete") from error
+                      print("FinMind quota exhausted; retrying the same API call in 60 seconds", flush=True)
+                      time.sleep(60)
+          class QuotaAwareLoader(original_loader):
+              def taiwan_stock_daily(self, *args, **kwargs):
+                  return with_quota_wait(super().taiwan_stock_daily, *args, **kwargs)
+              def taiwan_stock_info(self, *args, **kwargs):
+                  return with_quota_wait(super().taiwan_stock_info, *args, **kwargs)
+          scanner["main"].__globals__["DataLoader"] = QuotaAwareLoader
           scanner["main"]()
