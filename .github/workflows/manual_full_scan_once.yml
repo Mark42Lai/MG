@@ -1,0 +1,69 @@
+name: One-time full Taiwan breakout scan
+run-name: Manual full scan for 2026-10-21
+on:
+  push:
+    branches: ['ops/manual-scan-20261022-0032']
+    paths: ['.github/workflows/manual_full_scan_once.yml']
+permissions:
+  contents: read
+jobs:
+  scan:
+    name: Batch offset ${{ matrix.offset }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 95
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        offset: [0, 380, 760, 1140, 1520, 1900, 2280]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Wait for quota and run this manual batch
+        shell: python
+        env:
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          SCAN_OFFSET: ${{ matrix.offset }}
+          FINAL_BATCH: ${{ matrix.offset == 2280 && '1' || '0' }}
+        run: |
+          import os
+          import runpy
+          import sys
+          import time
+          from datetime import date
+          import requests
+
+          deadline = time.monotonic() + 75 * 60
+          while True:
+              response = requests.get(
+                  "https://api.web.finmindtrade.com/v2/user_info",
+                  headers={"Authorization": "Bearer " + os.environ["API_TOKEN"]},
+                  timeout=30,
+              )
+              response.raise_for_status()
+              info = response.json()
+              used = int(info["user_count"])
+              cap = int(info["api_request_limit"])
+              remaining = cap - used
+              print(f"FinMind quota: used={used}, limit={cap}, remaining={remaining}", flush=True)
+              if cap < 400:
+                  raise RuntimeError("Account limit is below the 400-request safety budget")
+              if remaining >= 400:
+                  break
+              if time.monotonic() >= deadline:
+                  raise RuntimeError("Quota did not recover within 75 minutes; batch was not scanned")
+              time.sleep(60)
+
+          # This is an explicitly requested manual catch-up, not a scheduled run.
+          os.environ["GITHUB_EVENT_NAME"] = "workflow_dispatch"
+          sys.argv = ["gsr_scanner.py", "--offset", os.environ["SCAN_OFFSET"], "--limit", "380"]
+          scanner = runpy.run_path("gsr_scanner.py", run_name="manual_scanner")
+          # Freeze the requested last closing date even if a job waits past midnight.
+          scanner["main"].__globals__["get_taiwan_today"] = lambda: date(2026, 10, 21)
+          scanner["main"]()
