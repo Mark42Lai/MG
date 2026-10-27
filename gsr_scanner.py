@@ -1,6 +1,7 @@
 import os
 import argparse
 import warnings
+import time
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -53,6 +54,36 @@ except UnicodeEncodeError as error:
 
 WINDOW = 12
 LOOKBACK_DAYS = 450
+
+
+
+class QuotaAwareDataLoader(DataLoader):
+    """Resume the same request when the FinMind hourly quota recovers."""
+
+    def __init__(self):
+        super().__init__()
+        self.quota_wait_seconds = 0
+
+    def _with_quota_wait(self, call, *args, **kwargs):
+        while True:
+            try:
+                return call(*args, **kwargs)
+            except Exception as error:
+                if "Requests reach the upper limit" not in str(error):
+                    raise
+                if self.quota_wait_seconds >= 75 * 60:
+                    raise RuntimeError(
+                        f"Requests reach the upper limit; waited 75 minutes: {error}"
+                    ) from error
+                print("⏳ FinMind 額度已滿，60 秒後從同一筆查詢繼續", flush=True)
+                time.sleep(60)
+                self.quota_wait_seconds += 60
+
+    def taiwan_stock_daily(self, *args, **kwargs):
+        return self._with_quota_wait(super().taiwan_stock_daily, *args, **kwargs)
+
+    def taiwan_stock_info(self, *args, **kwargs):
+        return self._with_quota_wait(super().taiwan_stock_info, *args, **kwargs)
 
 
 # =====================================================
@@ -127,8 +158,8 @@ def scheduled_trade_date(now_taiwan: datetime, offset: int):
 # ⑥ 尋找最近交易日
 # =====================================================
 
-def get_latest_trade_date(data_loader: DataLoader):
-    check_date = get_taiwan_today()
+def get_latest_trade_date(data_loader: DataLoader, check_date=None):
+    check_date = check_date or get_taiwan_today()
 
     for _ in range(10):
         next_date = check_date + timedelta(days=1)
@@ -388,25 +419,31 @@ def scan_stock(
 def main():
     show_environment_status()
 
-    if os.environ.get("GITHUB_EVENT_NAME") == "push":
+    requested_date = os.environ.get("SCAN_TRADE_DATE", "").strip()
+    if os.environ.get("GITHUB_EVENT_NAME") == "push" and not requested_date:
         print("ℹ️ Workflow 設定更新，不執行股票掃描")
         return
 
     expected_trade_date = None
-    if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+    if requested_date:
+        expected_trade_date = datetime.strptime(requested_date, "%Y-%m-%d").date()
+        age = (get_taiwan_today() - expected_trade_date).days
+        if not 0 <= age <= 1:
+            raise RuntimeError("掃描請求日期已過期或在未來，停止以免誤送訊號")
+    elif os.environ.get("GITHUB_EVENT_NAME") == "schedule":
         now_taiwan = datetime.now(timezone(timedelta(hours=8)))
         expected_trade_date = scheduled_trade_date(now_taiwan, args.offset)
 
     print("\n🔐 登入 FinMind API...")
 
-    data_loader = DataLoader()
+    data_loader = QuotaAwareDataLoader()
 
     data_loader.login_by_token(
         api_token=API_TOKEN
     )
 
     latest_trade_date = get_latest_trade_date(
-        data_loader
+        data_loader, expected_trade_date
     )
 
     # 定時任務只通報該台灣交易日的突破；休市時不重送前次訊號。
