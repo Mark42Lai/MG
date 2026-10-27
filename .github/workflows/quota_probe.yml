@@ -18,7 +18,7 @@ jobs:
         env:
           API_TOKEN: ${{ secrets.API_TOKEN }}
         run: |
-          import os, requests
+          import os, requests, re
           token = os.environ["API_TOKEN"]
           def inspect(value, path="root", depth=0):
               if depth > 3:
@@ -41,4 +41,22 @@ jobs:
                   params=params, timeout=30,
               )
               print(f"mode={mode}, http_status={response.status_code}")
-              inspect(response.json())
+              result = response.json()
+              inspect(result)
+              if result.get("status") != 200:
+                  message = str(result.get("msg", "")).replace(token, "[redacted]")
+                  message = re.sub(r"[A-Za-z0-9_@.\\-]{32,}", "[redacted]", message)
+                  print("error_message=" + message[:240])
+          response = requests.get(
+              "https://api.finmindtrade.com/api/v4/data",
+              headers={"Authorization": "Bearer " + token},
+              params={"dataset":"TaiwanStockPrice", "data_id":"2330", "start_date":"2026-10-27", "end_date":"2026-10-28"},
+              timeout=30,
+          )
+          result = response.json()
+          print(f"price_data_http_status={response.status_code}, status={result.get('status')}")
+          rows = result.get("data")
+          print(f"price_data_row_count={len(rows) if isinstance(rows,list) else 0}")
+          message = str(result.get("msg", "")).replace(token, "[redacted]")
+          message = re.sub(r"[A-Za-z0-9_@.\\-]{32,}", "[redacted]", message)
+          print("price_data_message=" + message[:240])
