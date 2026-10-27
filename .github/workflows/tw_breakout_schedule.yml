@@ -2,20 +2,13 @@ name: Run GSR Scan
 
 on:
   schedule:
-    - cron: '15 17 * * 1-5'   # 台灣 17:15，offset 0
-      timezone: Asia/Taipei
-    - cron: '15 18 * * 1-5'   # 台灣 18:15，offset 380
-      timezone: Asia/Taipei
-    - cron: '15 19 * * 1-5'   # 台灣 19:15，offset 760
-      timezone: Asia/Taipei
-    - cron: '15 20 * * 1-5'   # 台灣 20:15，offset 1140
-      timezone: Asia/Taipei
-    - cron: '15 21 * * 1-5'   # 台灣 21:15，offset 1520
-      timezone: Asia/Taipei
-    - cron: '15 22 * * 1-5'   # 台灣 22:15，offset 1900
-      timezone: Asia/Taipei
-    - cron: '15 23 * * 1-5'   # 台灣 23:15，offset 2280
-      timezone: Asia/Taipei
+    - cron: '15 9 * * 1-5'   # 台灣 17:15，offset 0
+    - cron: '15 10 * * 1-5'   # 台灣 18:15，offset 380
+    - cron: '15 11 * * 1-5'   # 台灣 19:15，offset 760
+    - cron: '15 12 * * 1-5'   # 台灣 20:15，offset 1140
+    - cron: '15 13 * * 1-5'   # 台灣 21:15，offset 1520
+    - cron: '15 14 * * 1-5'   # 台灣 22:15，offset 1900
+    - cron: '15 15 * * 1-5'   # 台灣 23:15，offset 2280
 
   workflow_dispatch:
 
@@ -25,6 +18,7 @@ permissions:
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    timeout-minutes: 100
 
     steps:
       # ==================================================
@@ -56,13 +50,13 @@ jobs:
         shell: bash
         run: |
           case '${{ github.event.schedule }}' in
-            '15 17 * * 1-5') offset=0 ;;
-            '15 18 * * 1-5') offset=380 ;;
-            '15 19 * * 1-5') offset=760 ;;
-            '15 20 * * 1-5') offset=1140 ;;
-            '15 21 * * 1-5') offset=1520 ;;
-            '15 22 * * 1-5') offset=1900 ;;
-            '15 23 * * 1-5') offset=2280 ;;
+            '15 9 * * 1-5') offset=0 ;;
+            '15 10 * * 1-5') offset=380 ;;
+            '15 11 * * 1-5') offset=760 ;;
+            '15 12 * * 1-5') offset=1140 ;;
+            '15 13 * * 1-5') offset=1520 ;;
+            '15 14 * * 1-5') offset=1900 ;;
+            '15 15 * * 1-5') offset=2280 ;;
             '') offset=0 ;;  # 手動執行只測第一批
             *) echo '未知排程，停止以免重複掃描'; exit 1 ;;
           esac
@@ -81,12 +75,12 @@ jobs:
           API_TOKEN: ${{ secrets.API_TOKEN }}
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-          FINAL_BATCH: ${{ github.event.schedule == '15 23 * * 1-5' && '1' || '0' }}
+          FINAL_BATCH: ${{ github.event.schedule == '15 15 * * 1-5' && '1' || '0' }}
 
         run: |
           echo "🚀 本次 offset：${{ steps.pick.outputs.offset }}"
           echo "🚀 本次 limit：380"
 
-          python gsr_scanner.py \
+          python -u gsr_scanner.py \
             --offset "${{ steps.pick.outputs.offset }}" \
             --limit 380
