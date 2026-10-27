@@ -1,0 +1,44 @@
+name: FinMind quota diagnostic
+on:
+  push:
+    branches: ['ops/manual-scan-20261022-0032']
+    paths: ['.github/workflows/quota_probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - shell: python
+        env:
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+        run: |
+          import os, requests
+          token = os.environ["API_TOKEN"]
+          def inspect(value, path="root", depth=0):
+              if depth > 3:
+                  return
+              if isinstance(value, dict):
+                  print(path + " keys=" + ",".join(value.keys()))
+                  for key, item in value.items():
+                      if key in ("user_count", "api_request_limit", "status") and isinstance(item, (int, float, str)):
+                          if str(item).replace(".", "", 1).isdigit():
+                              print(f"{path}.{key}={item}")
+                      elif isinstance(item, (dict, list)):
+                          inspect(item, path + "." + key, depth + 1)
+              elif isinstance(value, list) and value:
+                  inspect(value[0], path + "[0]", depth + 1)
+          for mode in ("header", "header_and_token_param"):
+              params = {"token": token} if mode == "header_and_token_param" else None
+              response = requests.get(
+                  "https://api.web.finmindtrade.com/v2/user_info",
+                  headers={"Authorization": "Bearer " + token},
+                  params=params, timeout=30,
+              )
+              print(f"mode={mode}, http_status={response.status_code}")
+              inspect(response.json())
