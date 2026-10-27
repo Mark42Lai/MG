@@ -124,6 +124,23 @@ def show_environment_status() -> None:
 # ⑤ 取得台灣日期
 # =====================================================
 
+def validate_finmind_token() -> None:
+    # The SDK treats HTTP 200 as login success even when the JSON status is 400.
+    response = requests.get(
+        "https://api.web.finmindtrade.com/v2/user_info",
+        headers={"Authorization": f"Bearer {API_TOKEN}"},
+        timeout=30,
+    )
+    response.raise_for_status()
+    info = response.json()
+    if not isinstance(info, dict) or str(info.get("status", 200)) != "200":
+        raise RuntimeError(
+            "FinMind API_TOKEN 驗證失敗，請重新取得 FinMind Token，"
+            "並更新 GitHub Repository Secret API_TOKEN；本次未掃描或發送 LINE"
+        )
+    print("✅ FinMind Token 驗證成功")
+
+
 def get_taiwan_today():
     taiwan_timezone = timezone(timedelta(hours=8))
     return datetime.now(taiwan_timezone).date()
@@ -435,6 +452,7 @@ def main():
         expected_trade_date = scheduled_trade_date(now_taiwan, args.offset)
 
     print("\n🔐 登入 FinMind API...")
+    validate_finmind_token()
 
     data_loader = QuotaAwareDataLoader()
 
@@ -643,3 +661,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
