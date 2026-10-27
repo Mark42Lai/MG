@@ -1,5 +1,5 @@
 name: One-time full Taiwan breakout scan
-run-name: Manual first batch for 2026-10-27
+run-name: Catch up remaining batches 2-7 for 2026-10-27
 on:
   push:
     branches: ['ops/manual-scan-20261022-0032']
@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        offset: [0]
+        offset: [380, 760, 1140, 1520, 1900, 2280]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
