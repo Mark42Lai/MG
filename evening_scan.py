@@ -53,6 +53,14 @@ class Receipts:
 
 def main():
     now = datetime.now(TAIPEI)
+    request_file = os.environ.get("SCAN_REQUEST_FILE")
+    if request_file:
+        request = json.loads(Path(request_file).read_text())
+        requested = datetime.strptime(request["trade_date"], "%Y-%m-%d").date()
+        if not 0 <= (now.date() - requested).days <= 1:
+            raise RuntimeError("Scan request is stale or in the future")
+        now = datetime.combine(requested, datetime.min.time()).replace(
+            tzinfo=TAIPEI, hour=23, minute=59)
     due = due_offsets(now)
     if not due:
         print(f'{now.isoformat()}: outside Taiwan weekday evening; no scan', flush=True)
@@ -64,7 +72,7 @@ def main():
     completed = set(state.get(trade_date, []))
     while True:
         clock = datetime.now(TAIPEI)
-        if clock.date() != now.date():
+        if request_file or clock.date() != now.date():
             clock = now.replace(hour=23, minute=59)
         pending = [offset for offset in due_offsets(clock) if offset not in completed]
         if not pending:
