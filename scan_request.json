@@ -1,4 +1,5 @@
 {
-  "trade_date": "2026-11-09",
-  "reason": "Catch up missed November 9 scans; verify external push trigger"
+  "trade_date": "2026-11-10",
+  "requested_at": "2026-11-10T12:00:07Z",
+  "reason": "Taiwan 20:00 daily breakout scan"
 }
